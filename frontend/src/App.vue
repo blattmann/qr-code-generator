@@ -23,6 +23,16 @@
           accept="image/*"
         />
       </div>
+      <div class="mb-3">
+        <label for="qrColor" class="form-label">QR Code Color:</label>
+        <input
+          type="color"
+          id="qrColor"
+          v-model="qrColor"
+          class="form-control"
+          required
+        />
+      </div>
       <div class="mb-3 form-check">
         <input
           type="checkbox"
@@ -92,7 +102,7 @@
         <a
           :href="qrCodeUrls.png"
           download="qrcode.png"
-          class="btn btn-secondary mt-2"
+          class="btn btn-secondary mt-2 d-block"
           >Download PNG</a
         >
       </div>
@@ -106,7 +116,7 @@
         <a
           :href="qrCodeUrls.svg"
           download="qrcode.svg"
-          class="btn btn-secondary mt-2"
+          class="btn btn-secondary mt-2 d-block"
           >Download SVG</a
         >
       </div>
@@ -122,11 +132,12 @@ export default {
   setup() {
     const text = ref("");
     const logo = ref(null);
+    const qrColor = ref("#000000");
     const includeFrame = ref(false);
     const frameDistance = ref(20);
-    const frameThickness = ref(10);
+    const frameThickness = ref(20);
     const frameColor = ref("#000000");
-    const frameRadius = ref(0);
+    const frameRadius = ref(10);
     const qrCodeUrls = ref({ png: "", svg: "" });
     const isSubmitting = ref(false);
 
@@ -144,6 +155,7 @@ export default {
 
       console.log("Current text value:", text.value);
       console.log("Current logo value:", logo.value);
+      console.log("Current QR code color value:", qrColor.value);
       console.log("Current frame values:", {
         includeFrame: includeFrame.value,
         frameDistance: frameDistance.value,
@@ -154,6 +166,7 @@ export default {
 
       const formData = new FormData();
       formData.append("text", text.value);
+      formData.append("qrColor", qrColor.value);
       if (logo.value) {
         formData.append("logo", logo.value);
       }
@@ -180,6 +193,7 @@ export default {
     return {
       text,
       logo,
+      qrColor,
       includeFrame,
       frameDistance,
       frameThickness,

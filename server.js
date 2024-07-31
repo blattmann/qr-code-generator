@@ -26,8 +26,15 @@ if (!fs.existsSync(path.join(__dirname, "frontend", "public", "qrcodes"))) {
 }
 
 app.post("/generate", upload.single("logo"), async (req, res) => {
-  const { text, frameDistance, frameThickness, frameColor, frameRadius } =
-    req.body;
+  const {
+    text,
+    qrColor,
+    includeFrame,
+    frameDistance,
+    frameThickness,
+    frameColor,
+    frameRadius,
+  } = req.body;
   const logoPath = req.file ? req.file.path : null;
   const qrId = uuidv4();
   const tempQrPath = path.join(__dirname, "uploads", `${qrId}-temp.png`);
@@ -49,17 +56,70 @@ app.post("/generate", upload.single("logo"), async (req, res) => {
   try {
     console.log("Generating QR code for text:", text);
 
-    // Generate SVG QR code
-    const qrSvg = await QRCode.toString(text, {
-      type: "svg",
+    const qrOptions = {
+      color: {
+        dark: qrColor, // Set QR code color
+        light: "#FFFFFF", // Set background color
+      },
       margin: 1,
       width: 500,
+    };
+
+    // Generate SVG QR code
+    let qrSvg = await QRCode.toString(text, {
+      ...qrOptions,
+      type: "svg",
     });
+
+    if (logoPath) {
+      console.log("Adding logo to SVG QR code:", logoPath);
+      const logoBuffer = await sharp(logoPath)
+        .resize({ width: 100, height: 100, fit: "inside" })
+        .toBuffer();
+      const logoBase64 = logoBuffer.toString("base64");
+      const logoDataUri = `data:image/png;base64,${logoBase64}`;
+
+      // Embed the logo into the SVG QR code
+      const logoSvg = `
+        <image x="200" y="200" width="100" height="100" href="${logoDataUri}" />
+      `;
+      qrSvg = qrSvg.replace("</svg>", logoSvg + "</svg>");
+    }
+
+    if (includeFrame === "true") {
+      console.log("Adding frame to SVG QR code");
+      const frameDistancePx = parseInt(frameDistance, 10);
+      const frameThicknessPx = parseInt(frameThickness, 10);
+      const frameColorHex = frameColor || "#000000";
+      const frameRadiusPx = parseInt(frameRadius, 10);
+      const svgWidth = 500 + 2 * (frameDistancePx + frameThicknessPx);
+      const svgHeight = 500 + 2 * (frameDistancePx + frameThicknessPx);
+
+      const frameSvg = `
+        <svg width="${svgWidth}" height="${svgHeight}" xmlns="http://www.w3.org/2000/svg">
+          <rect x="0" y="0" width="${svgWidth}" height="${svgHeight}" fill="${frameColorHex}" rx="${frameRadiusPx}" ry="${frameRadiusPx}" />
+          <rect x="${frameThicknessPx}" y="${frameThicknessPx}" width="${
+        svgWidth - 2 * frameThicknessPx
+      }" height="${
+        svgHeight - 2 * frameThicknessPx
+      }" fill="white" rx="${frameRadiusPx}" ry="${frameRadiusPx}" />
+          ${qrSvg.replace(
+            "<svg",
+            '<svg x="' +
+              (frameThicknessPx + frameDistancePx) +
+              '" y="' +
+              (frameThicknessPx + frameDistancePx) +
+              '"'
+          )}
+        </svg>
+      `;
+      qrSvg = frameSvg;
+    }
 
     fs.writeFileSync(qrOutputPathSvg, qrSvg);
 
     // Generate PNG QR code
-    let qrPngBuffer = await QRCode.toBuffer(text, { margin: 1, width: 500 });
+    let qrPngBuffer = await QRCode.toBuffer(text, qrOptions);
 
     if (logoPath) {
       console.log("Adding logo to PNG QR code:", logoPath);
@@ -97,13 +157,13 @@ app.post("/generate", upload.single("logo"), async (req, res) => {
       await unlinkAsync(logoPath); // Clean up the uploaded logo file
     }
 
-    // Add frame around the QR code
-    const frameDistancePx = parseInt(frameDistance, 10);
-    const frameThicknessPx = parseInt(frameThickness, 10);
-    const frameColorHex = frameColor || "#000000";
-    const frameRadiusPx = parseInt(frameRadius, 10);
+    if (includeFrame === "true") {
+      console.log("Adding frame to PNG QR code");
+      const frameDistancePx = parseInt(frameDistance, 10);
+      const frameThicknessPx = parseInt(frameThickness, 10);
+      const frameColorHex = frameColor || "#000000";
+      const frameRadiusPx = parseInt(frameRadius, 10);
 
-    if (frameThicknessPx > 0) {
       const qrPngImage = sharp(qrPngBuffer);
       const { width, height } = await qrPngImage.metadata();
 
