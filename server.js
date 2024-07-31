@@ -54,13 +54,14 @@ app.post("/generate", upload.single("logo"), async (req, res) => {
       margin: 1,
       width: 500,
     });
+
     fs.writeFileSync(qrOutputPathSvg, qrSvg);
 
     // Generate PNG QR code
     let qrPngBuffer = await QRCode.toBuffer(text, { margin: 1, width: 500 });
 
     if (logoPath) {
-      console.log("Adding logo to QR code:", logoPath);
+      console.log("Adding logo to PNG QR code:", logoPath);
       const qrPngImage = sharp(qrPngBuffer);
       const { width, height } = await qrPngImage.metadata();
 
