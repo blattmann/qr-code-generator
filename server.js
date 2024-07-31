@@ -26,7 +26,8 @@ if (!fs.existsSync(path.join(__dirname, "frontend", "public", "qrcodes"))) {
 }
 
 app.post("/generate", upload.single("logo"), async (req, res) => {
-  const { text } = req.body;
+  const { text, frameDistance, frameThickness, frameColor, frameRadius } =
+    req.body;
   const logoPath = req.file ? req.file.path : null;
   const qrId = uuidv4();
   const tempQrPath = path.join(__dirname, "uploads", `${qrId}-temp.png`);
@@ -89,14 +90,60 @@ app.post("/generate", upload.single("logo"), async (req, res) => {
         .toBuffer();
 
       // Composite the logo onto the PNG QR code
-      await sharp(qrPngBuffer)
+      qrPngBuffer = await sharp(qrPngBuffer)
         .composite([{ input: logoBuffer, gravity: "center" }])
-        .toFile(qrOutputPathPng);
+        .toBuffer();
 
       await unlinkAsync(logoPath); // Clean up the uploaded logo file
-    } else {
-      await sharp(qrPngBuffer).toFile(qrOutputPathPng); // Save the QR code without the center square
     }
+
+    // Add frame around the QR code
+    const frameDistancePx = parseInt(frameDistance, 10);
+    const frameThicknessPx = parseInt(frameThickness, 10);
+    const frameColorHex = frameColor || "#000000";
+    const frameRadiusPx = parseInt(frameRadius, 10);
+
+    if (frameThicknessPx > 0) {
+      const qrPngImage = sharp(qrPngBuffer);
+      const { width, height } = await qrPngImage.metadata();
+
+      const frameWidth = width + 2 * (frameDistancePx + frameThicknessPx);
+      const frameHeight = height + 2 * (frameDistancePx + frameThicknessPx);
+
+      const svgFrame = `
+        <svg width="${frameWidth}" height="${frameHeight}">
+          <rect x="0" y="0" width="${frameWidth}" height="${frameHeight}" fill="${frameColorHex}" rx="${frameRadiusPx}" ry="${frameRadiusPx}" />
+          <rect x="${frameThicknessPx}" y="${frameThicknessPx}" width="${
+        frameWidth - 2 * frameThicknessPx
+      }" height="${
+        frameHeight - 2 * frameThicknessPx
+      }" fill="white" rx="${frameRadiusPx}" ry="${frameRadiusPx}" />
+        </svg>
+      `;
+
+      const frameBuffer = Buffer.from(svgFrame);
+
+      qrPngBuffer = await sharp({
+        create: {
+          width: frameWidth,
+          height: frameHeight,
+          channels: 4,
+          background: { r: 255, g: 255, b: 255, alpha: 1 },
+        },
+      })
+        .composite([
+          { input: frameBuffer, gravity: "center" },
+          {
+            input: qrPngBuffer,
+            top: frameDistancePx + frameThicknessPx,
+            left: frameDistancePx + frameThicknessPx,
+          },
+        ])
+        .png()
+        .toBuffer();
+    }
+
+    await sharp(qrPngBuffer).toFile(qrOutputPathPng);
 
     console.log("QR code generated:", {
       png: `/qrcodes/${path.basename(qrOutputPathPng)}`,
