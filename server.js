@@ -56,31 +56,31 @@ app.post("/generate", upload.single("logo"), async (req, res) => {
     });
     fs.writeFileSync(qrOutputPathSvg, qrSvg);
 
-    // Generate PNG QR code with empty center
-    const qrPngBuffer = await QRCode.toBuffer(text, { margin: 1, width: 500 });
-    const qrPngImage = sharp(qrPngBuffer);
-    const { width, height } = await qrPngImage.metadata();
-
-    const logoSize = 100;
-    const centerSquareSize = logoSize + 20;
-    const qrPngWithCenterEmpty = await qrPngImage
-      .composite([
-        {
-          input:
-            Buffer.from(`<svg width="${centerSquareSize}" height="${centerSquareSize}">
-                    <rect x="0" y="0" width="${centerSquareSize}" height="${centerSquareSize}" fill="white" />
-                </svg>`),
-          left: Math.floor((width - centerSquareSize) / 2),
-          top: Math.floor((height - centerSquareSize) / 2),
-        },
-      ])
-      .toBuffer();
-
-    // Save the PNG QR code with empty center
-    await sharp(qrPngWithCenterEmpty).toFile(tempQrPath);
+    // Generate PNG QR code
+    let qrPngBuffer = await QRCode.toBuffer(text, { margin: 1, width: 500 });
 
     if (logoPath) {
       console.log("Adding logo to QR code:", logoPath);
+      const qrPngImage = sharp(qrPngBuffer);
+      const { width, height } = await qrPngImage.metadata();
+
+      const logoSize = 100;
+      const centerSquareSize = logoSize + 20;
+
+      // Add a white square in the center
+      qrPngBuffer = await qrPngImage
+        .composite([
+          {
+            input: Buffer.from(
+              `<svg width="${centerSquareSize}" height="${centerSquareSize}">
+                <rect x="0" y="0" width="${centerSquareSize}" height="${centerSquareSize}" fill="white" />
+              </svg>`
+            ),
+            left: Math.floor((width - centerSquareSize) / 2),
+            top: Math.floor((height - centerSquareSize) / 2),
+          },
+        ])
+        .toBuffer();
 
       // Resize the logo to fit within the QR code
       const logoBuffer = await sharp(logoPath)
@@ -88,14 +88,13 @@ app.post("/generate", upload.single("logo"), async (req, res) => {
         .toBuffer();
 
       // Composite the logo onto the PNG QR code
-      await sharp(tempQrPath)
+      await sharp(qrPngBuffer)
         .composite([{ input: logoBuffer, gravity: "center" }])
         .toFile(qrOutputPathPng);
 
       await unlinkAsync(logoPath); // Clean up the uploaded logo file
-      await unlinkAsync(tempQrPath); // Clean up the temporary QR code file
     } else {
-      fs.renameSync(tempQrPath, qrOutputPathPng); // Rename the temp QR code file to the final output file
+      await sharp(qrPngBuffer).toFile(qrOutputPathPng); // Save the QR code without the center square
     }
 
     console.log("QR code generated:", {
